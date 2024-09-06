@@ -23,11 +23,11 @@ _Last update: 09/06/24_
 There are a lot of little details that I want to improve, but as a first experience rendering GL with PyQt everything is going well 😙.
 
 **TO DO**
-- [] Set Widget size
-- [] Set crease pattern margin (I hate that it renders at the edge)
-- [] Make paintGL() call at initialization (pattern doesn't show at first)
-- [] Make lines selectable
-- [] Make 3D view
+- [ ] Set Widget size
+- [ ] Set crease pattern margin (I hate that it renders at the edge)
+- [ ] Make paintGL() call at initialization (pattern doesn't show at first)
+- [ ] Make lines selectable
+- [ ] Make 3D view
 
 ## Reference links and information
 [Robert J. Lang Website](https://langorigami.com/)
