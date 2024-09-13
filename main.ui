@@ -20,13 +20,38 @@
       <widget class="QPushButton" name="file_button">
        <property name="font">
         <font>
+         <pointsize>10</pointsize>
          <kerning>true</kerning>
         </font>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">background-color:rgba(0,0,0,0)</string>
        </property>
        <property name="text">
         <string>File</string>
        </property>
+       <property name="checkable">
+        <bool>false</bool>
+       </property>
       </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="pushButton">
+       <property name="font">
+        <font>
+         <pointsize>10</pointsize>
+        </font>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">background-color:rgba(0,0,0,0)</string>
+       </property>
+       <property name="text">
+        <string>Geometry</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="comboBox"/>
      </item>
      <item>
       <spacer name="horizontalSpacer">

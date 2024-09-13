@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>640</width>
+    <height>608</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>MainWindow</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item>
+     <widget class="QTabWidget" name="tabWidget">
+      <property name="currentIndex">
+       <number>-1</number>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>640</width>
+     <height>25</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>File</string>
+    </property>
+    <addaction name="actionLoad"/>
+    <addaction name="actionOpen_Pattern"/>
+    <addaction name="separator"/>
+    <addaction name="actionReload"/>
+    <addaction name="actionSave_as"/>
+    <addaction name="separator"/>
+    <addaction name="actionRecent_Files"/>
+   </widget>
+   <widget class="QMenu" name="menuGeometry">
+    <property name="title">
+     <string>Geometry</string>
+    </property>
+    <addaction name="actionCreate_Paper"/>
+    <addaction name="separator"/>
+    <addaction name="actionPreview_in_3D"/>
+    <addaction name="actionSimulate"/>
+   </widget>
+   <addaction name="menuFile"/>
+   <addaction name="menuGeometry"/>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+  <action name="actionLoad">
+   <property name="text">
+    <string>New Pattern</string>
+   </property>
+  </action>
+  <action name="actionOpen_Pattern">
+   <property name="text">
+    <string>Open Pattern</string>
+   </property>
+  </action>
+  <action name="actionReload">
+   <property name="text">
+    <string>Save</string>
+   </property>
+  </action>
+  <action name="actionSave_as">
+   <property name="text">
+    <string>Save as</string>
+   </property>
+  </action>
+  <action name="actionRecent_Files">
+   <property name="text">
+    <string>Recent Files</string>
+   </property>
+  </action>
+  <action name="actionPreview_in_3D">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>Preview in 3D</string>
+   </property>
+  </action>
+  <action name="actionSimulate">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>Simulate</string>
+   </property>
+  </action>
+  <action name="actionCreate_Paper">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>Create Paper</string>
+   </property>
+  </action>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
