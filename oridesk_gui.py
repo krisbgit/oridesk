@@ -1,6 +1,8 @@
 import sys
 import re
 import os
+import shapely
+import shapely.geometry
 from PySide2 import QtCore
 from PySide2 import QtUiTools
 from PySide2 import QtWidgets
@@ -70,10 +72,10 @@ class Oridesk(QtWidgets.QDialog):
             if line.startswith("<line"):
                 line_data = re.findall('".*?"', line)
                 new_line = {
-                    "start_point":(float(re.sub('"', '', line_data[0])), 
-                                float(re.sub('"', '', line_data[1]))),
-                    "end_point":(float(re.sub('"', '', line_data[2])), 
-                                float(re.sub('"', '', line_data[3]))),
+                    "line":shapely.geometry.LineString(
+                        [(float(re.sub('"', '', line_data[0])), float(re.sub('"', '', line_data[1]))),
+                        (float(re.sub('"', '', line_data[2])), float(re.sub('"', '', line_data[3]))),
+                        ]),
                     "stroke":re.sub('"', '', line_data[4])
                 }
                 svg_lines.append(new_line)
@@ -166,11 +168,13 @@ class Line():
             return (1.0, 0.0, 0.0), False
         
     def normalize_line_vertices(self):
-        start_point_x = self.normalize_value(value=self.line.get("start_point")[0], min_points=min(self.points_x), max_points=max(self.points_x))
-        start_point_y = self.normalize_value(value=self.line.get("start_point")[1], min_points=min(self.points_y), max_points=max(self.points_y))
+        line_data = self.line.get("line")
+        coordinates = shapely.get_coordinates(line_data).tolist()
+        start_point_x = self.normalize_value(value=coordinates[0][0], min_points=min(self.points_x), max_points=max(self.points_x))
+        start_point_y = self.normalize_value(value=coordinates[0][1], min_points=min(self.points_y), max_points=max(self.points_y))
 
-        end_point_x = self.normalize_value(value=self.line.get("end_point")[0], min_points=min(self.points_x), max_points=max(self.points_x))
-        end_point_y = self.normalize_value(value=self.line.get("end_point")[1], min_points=min(self.points_y), max_points=max(self.points_y))
+        end_point_x = self.normalize_value(value=coordinates[1][0], min_points=min(self.points_x), max_points=max(self.points_x))
+        end_point_y = self.normalize_value(value=coordinates[1][1], min_points=min(self.points_y), max_points=max(self.points_y))
 
         self.start_point = (start_point_x, start_point_y)
         self.end_point = (end_point_x, end_point_y)
@@ -332,10 +336,11 @@ class CreasePattern(QtWidgets.QOpenGLWidget):
         points_x = []
         points_y = []
         for line in self.crease_pattern:
-            start_point = line.get("start_point")
-            end_point = line.get("end_point")
-            points_x.extend((start_point[0], end_point[0]))
-            points_y.extend((start_point[1], end_point[1]))
+            shapely_line = line.get("line")
+            points = shapely.get_coordinates(shapely_line).tolist()
+            print(points)
+            points_x.extend((points[0][0], points[1][0]))
+            points_y.extend((points[0][1], points[1][1]))
         return points_x, points_y
 
     def draw_pattern(self):
