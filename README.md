@@ -18,14 +18,18 @@ If you want to try the tool without downloading Oriedita, I leave an SVG example
 ## Development
 _Last update: 09/06/24_
 
+This past week I was fighting making a polygon detection algorithm and discovered Shapely, a python library that makes exactly what I was doing: point, line and polygon classes. I created a new branch for implement this library to mantain my original algorithm and then compare both.
+
+_Update: 09/06/24_
+
 ![image](https://github.com/user-attachments/assets/c684b0c1-733a-4fa0-837f-981c88f734ba)
 
 There are a lot of little details that I want to improve, but as a first experience rendering GL with PyQt everything is going well 😙.
 
 **TO DO**
-- [ ] Set Widget size
-- [ ] Set crease pattern margin (I hate that it renders at the edge)
-- [ ] Make paintGL() call at initialization (pattern doesn't show at first)
+- [X] Set Widget size
+- [X] Set crease pattern margin (I hate that it renders at the edge)
+- [X] Make paintGL() call at initialization (pattern doesn't show at first)
 - [ ] Make lines selectable
 - [ ] Make 3D view
 
