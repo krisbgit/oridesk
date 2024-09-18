@@ -127,6 +127,18 @@ class PaperMenu(QtWidgets.QDialog):
         self.parent.create_plane_paper(size=self.ui.sizeBox.value(), name=self.ui.name.text())
         self.close()
 
+class Polygon():
+    def __init__(self, first_line, second_line, third_line):
+        self.first_line = first_line
+        self.second_line = second_line
+        self.third_line = third_line
+    
+    def __hash__(self):
+        return hash((self.first_line, self.second_line, self.third_line))
+    
+    def __eq__(self, other):
+        return self.__hash__() == other.__hash__()
+
 class Line():
     def __init__(self, idx, line, points_x, points_y):
         self.idx = idx
@@ -135,6 +147,15 @@ class Line():
         self.points_x, self.points_y = points_x, points_y
         self.size = (-1, 1)
         self.normalize_line_vertices()
+
+    def __lt__(self, other):
+        return self.idx < other.idx
+    
+    def __gt__(self, other):
+        return self.idx > other.idx
+    
+    def __hash__(self):
+        return hash(self.idx)
 
     def get_stroke_color(self):
         if self.line.get("stroke") == "black":
@@ -168,18 +189,114 @@ class CreasePattern(QtWidgets.QOpenGLWidget):
         
         QtWidgets.QOpenGLWidget.__init__(self, parent)
 
+    def check_shared_value(self, line, edge):
+        if edge.start_point == line:
+            return "start"
+        elif edge.end_point == line:
+            return "end"
+
     def create_polygon_plane(self, size=1, name=""):
         origami_paper = om.MFnMesh()
-        polygon_vertices = set()
+        self.polygons = set()
+        polygon_vertices = []
         polygon_connects = []
 
-        # origami_paper.create(polygon_vertices, [len(polygon_vertices)], polygon_connects)
         for line in self.lines:
-            polygon_vertices.update([line.start_point, line.end_point])
+            # line.start_point / line.end_point
+            # 1. Get lines that share the start point
+            lines_from_start = [edge for edge in self.lines if line.start_point in (edge.start_point, edge.end_point)]
+            lines_from_end = [edge for edge in self.lines if line.end_point in (edge.start_point, edge.end_point)]
+            lines_from_start.remove(line)
+            lines_from_end.remove(line)
+
+            for first_connection in lines_from_start:
+                shared_value = self.check_shared_value(line.start_point, first_connection)
+                if shared_value == "start":
+                    second_connections = [edge for edge in lines_from_end if first_connection.end_point in (edge.start_point, edge.end_point)]
+                    lines_from_start.remove(first_connection)
+                    second_connections += [edge for edge in lines_from_start if first_connection.end_point in (edge.start_point, edge.end_point)]
+                    lines_from_start.append(first_connection)
+                    if second_connections:
+                        print(len(second_connections), second_connections[0])
+                    first_point = first_connection.end_point
+
+                elif shared_value == "end":
+                    second_connections = [edge for edge in lines_from_end if first_connection.start_point in (edge.start_point, edge.end_point)]
+                    lines_from_start.remove(first_connection)
+                    second_connections += [edge for edge in lines_from_start if first_connection.start_point in (edge.start_point, edge.end_point)]
+                    lines_from_start.append(first_connection)
+                    if second_connections:
+                        print(len(second_connections), second_connections[0])
+                    first_point = first_connection.start_point
+
+                if second_connections:
+                    for second_connection in second_connections:
+                        polygon = sorted([line, first_connection, second_connection])
+                        poly = Polygon(polygon[0], polygon[1], polygon[2])
+                        if poly not in self.polygons:
+                            
+                            self.polygons.add(poly)
+                            vertices = [(line.start_point[0], line.start_point[1]),
+                                        (first_point[0], first_point[1]),
+                                        (line.end_point[0], line.end_point[1])
+                                        ]
+                            print(vertices)
+                            for vertex in vertices:
+                                if vertex in polygon_vertices:
+                                    #print("Found at ", polygon_vertices.index(vertex))
+                                    polygon_connects.append(polygon_vertices.index(vertex))
+                                else:
+                                    polygon_vertices.append(vertex)
+                                    polygon_connects.append(polygon_vertices.index(vertex))
             
-        for line in polygon_vertices:
-            cmds.spaceLocator(p=(line[0], line[1], 1))
-    
+            for first_connection in lines_from_end:
+                shared_value = self.check_shared_value(line.end_point, first_connection)
+                if shared_value == "start":
+                    second_connections = [edge for edge in lines_from_start if first_connection.end_point in (edge.start_point, edge.end_point)]
+                    lines_from_end.remove(first_connection)
+                    second_connections += [edge for edge in lines_from_end if first_connection.end_point in (edge.start_point, edge.end_point)]
+                    lines_from_end.append(first_connection)
+                    if second_connections:
+                        print(len(second_connections), second_connections[0])
+                    first_point = first_connection.end_point
+
+                elif shared_value == "end":
+                    second_connections = [edge for edge in lines_from_start if first_connection.start_point in (edge.start_point, edge.end_point)]
+                    lines_from_end.remove(first_connection)
+                    second_connections += [edge for edge in lines_from_end if first_connection.start_point in (edge.start_point, edge.end_point)]
+                    lines_from_end.append(first_connection)
+                    if second_connections:
+                        print(len(second_connections), second_connections[0])
+                    first_point = first_connection.start_point
+
+                if second_connections:
+                    for second_connection in second_connections:
+                        polygon = sorted([line, first_connection, second_connection])
+                        poly = Polygon(polygon[0], polygon[1], polygon[2])
+                        if poly not in self.polygons:
+                            
+                            self.polygons.add(poly)
+                            vertices = [(line.end_point[0], line.end_point[1]),
+                                        (first_point[0], first_point[1]),
+                                        (line.start_point[0], line.start_point[1])
+                                        ]
+                            print(vertices)
+                            for vertex in vertices:
+                                if vertex in polygon_vertices:
+                                    #print("Found at ", polygon_vertices.index(vertex))
+                                    polygon_connects.append(polygon_vertices.index(vertex))
+                                else:
+                                    polygon_vertices.append(vertex)
+                                    polygon_connects.append(polygon_vertices.index(vertex))
+
+        polygon_count = [3 for polygon in self.polygons]
+        polygon_points = []
+        for vertex in polygon_vertices:
+            point = om.MPoint(vertex)
+            polygon_points.append(point)
+
+        origami_paper.create(polygon_points, polygon_count, polygon_connects)
+
         return origami_paper
 
     def wheelEvent(self, event):
