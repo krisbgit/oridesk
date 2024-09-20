@@ -1,6 +1,7 @@
 import sys
 import re
 import os
+import itertools
 import shapely
 import shapely.geometry
 from PySide2 import QtCore
@@ -33,6 +34,7 @@ class Oridesk(QtWidgets.QDialog):
         self.init_ui(ui_file)
         self.create_layout()
         self.create_connections()
+        self.current_widget = self.ui.frame
 
     def create_connections(self):
         self.ui.actionOpen_Pattern.triggered.connect(self.load_pattern_in_tab)
@@ -56,11 +58,18 @@ class Oridesk(QtWidgets.QDialog):
     def load_pattern_in_tab(self):
         self.set_crease_pattern_file()
         self.pattern_widget = CreasePattern(crease_pattern=self.crease_pattern)
-        self.ui.tabWidget.insertTab(0, self.pattern_widget, "2D Pattern")
+
+        self.ui.verticalLayout_3.replaceWidget(self.current_widget, self.pattern_widget)
+        self.current_widget = self.pattern_widget
+
         self.ui.actionCreate_Paper.setEnabled(True)
+        self.ui.tabWidget.setTabText(self.ui.tabWidget.currentIndex(), self.file_name)
+        self.ui.lines_label.setText(str(len(self.pattern_widget.lines)))
+        self.ui.points_label.setText(str(len(self.pattern_widget.points)))
 
     def set_crease_pattern_file(self):
-        file = self.open_file_search()[0] 
+        file = self.open_file_search()[0]
+        self.file_name = os.path.basename(os.path.normpath(file))
         self.crease_pattern = self.get_pattern_from_file(file=file)
 
     def get_pattern_from_file(self, file):
@@ -148,6 +157,7 @@ class Line():
         self.color, self.is_margin = self.get_stroke_color()
         self.points_x, self.points_y = points_x, points_y
         self.size = (-1, 1)
+        self.orig_start_point, self.orig_end_point = self.get_coordinates()
         self.normalize_line_vertices()
 
     def __lt__(self, other):
@@ -159,6 +169,11 @@ class Line():
     def __hash__(self):
         return hash(self.idx)
 
+    def get_coordinates(self):
+        line_data = self.line.get("line")
+        coordinates = shapely.get_coordinates(line_data).tolist()
+        return (coordinates[0][0], coordinates[0][1]), (coordinates[1][0], coordinates[1][1])
+
     def get_stroke_color(self):
         if self.line.get("stroke") == "black":
             return (0.0, 0.0, 0.0), True
@@ -168,16 +183,15 @@ class Line():
             return (1.0, 0.0, 0.0), False
         
     def normalize_line_vertices(self):
-        line_data = self.line.get("line")
-        coordinates = shapely.get_coordinates(line_data).tolist()
-        start_point_x = self.normalize_value(value=coordinates[0][0], min_points=min(self.points_x), max_points=max(self.points_x))
-        start_point_y = self.normalize_value(value=coordinates[0][1], min_points=min(self.points_y), max_points=max(self.points_y))
 
-        end_point_x = self.normalize_value(value=coordinates[1][0], min_points=min(self.points_x), max_points=max(self.points_x))
-        end_point_y = self.normalize_value(value=coordinates[1][1], min_points=min(self.points_y), max_points=max(self.points_y))
+        start_point_x = self.normalize_value(value=self.orig_start_point[0], min_points=min(self.points_x), max_points=max(self.points_x))
+        start_point_y = self.normalize_value(value=self.orig_start_point[1], min_points=min(self.points_y), max_points=max(self.points_y))
 
-        self.start_point = (start_point_x, start_point_y)
-        self.end_point = (end_point_x, end_point_y)
+        end_point_x = self.normalize_value(value=self.orig_end_point[0], min_points=min(self.points_x), max_points=max(self.points_x))
+        end_point_y = self.normalize_value(value=self.orig_end_point[1], min_points=min(self.points_y), max_points=max(self.points_y))
+
+        self.start_point = (round(start_point_x, 10), round(start_point_y*-1, 10))
+        self.end_point = (round(end_point_x, 10), round(end_point_y*-1, 10))
     
     def normalize_value(self, value, min_points, max_points):
         return (self.size[1] - self.size[0]) * ((value - min_points)/(max_points - min_points)) + self.size[0]
@@ -188,118 +202,106 @@ class CreasePattern(QtWidgets.QOpenGLWidget):
         self.threshold = 0
         self.crease_pattern = crease_pattern
         self.pattern_margin_lines = []
-        self.points_x, self.points_y = self.get_all_vertices()
+        self.points, self.points_x, self.points_y = self.get_all_vertices()
         self.lines = self.get_line_data()
         
         QtWidgets.QOpenGLWidget.__init__(self, parent)
+        
+    def check_line_intersection(self, first_line, other_line):
+        if first_line.intersects(other_line):
+            return True
+        else:
+            return False
 
-    def check_shared_value(self, line, edge):
-        if edge.start_point == line:
-            return "start"
-        elif edge.end_point == line:
-            return "end"
+    def find_points_connected_with(self, point, line_list):
+        points_connected = []
+        for line in line_list:
+            if point == line.orig_end_point:
+                points_connected.append(line.orig_start_point)
+            if point == line.orig_start_point:
+                points_connected.append(line.orig_end_point)
+        return points_connected
+    
+    def find_line_by_points(self, first_point, second_point):
+        for line in self.lines:
+            if line.orig_start_point == first_point:
+                if line.orig_end_point == second_point:
+                    return line
+            elif line.orig_end_point == first_point:
+                if line.orig_start_point == second_point:
+                    return line
+        return False
+    
+    def get_normalized_polygon_vertices(self, lines):
+        points = set()
+        for line in lines:
+            points.add(line.start_point)
+            points.add(line.end_point)
+        return list(points)
 
+    def find_tris(self):
+        polygons = []
+        all_combinations = []
+        false_combinations = []
+        true_combinations = []
+        for point in self.points:
+            points_connected = self.find_points_connected_with(point, self.lines)
+            combinations = list(itertools.combinations(points_connected, 2))
+            all_combinations += combinations
+            for line in self.lines:
+                if (line.orig_start_point, line.orig_end_point) in combinations or (line.orig_end_point, line.orig_start_point) in combinations:
+                    if (line.orig_start_point, line.orig_end_point) in combinations:
+                        true_combinations.append((line.orig_start_point, line.orig_end_point))
+
+                    if (line.orig_end_point, line.orig_start_point) in combinations:
+                        true_combinations.append((line.orig_end_point, line.orig_start_point))
+
+                    first_line = self.find_line_by_points(point, line.orig_start_point)
+                    second_line = self.find_line_by_points(point, line.orig_end_point)
+                    third_line = self.find_line_by_points(line.orig_start_point, line.orig_end_point)
+                    lines = sorted([first_line, second_line, third_line])
+                    if lines not in polygons:
+                        polygons.append(lines)
+
+        for true_line in true_combinations:
+            if true_line in all_combinations:
+                coincidences = [all_combinations.index(line) for line in all_combinations if line == true_line]
+                for idx in coincidences:
+                    del all_combinations[idx]
+        print(len(set(all_combinations)))
+        return polygons, all_combinations
+                    
     def create_polygon_plane(self, size=1, name=""):
         origami_paper = om.MFnMesh()
         self.polygons = set()
         polygon_vertices = []
         polygon_connects = []
+        polygon_count = []
 
-        for line in self.lines:
-            # line.start_point / line.end_point
-            # 1. Get lines that share the start point
-            lines_from_start = [edge for edge in self.lines if line.start_point in (edge.start_point, edge.end_point)]
-            lines_from_end = [edge for edge in self.lines if line.end_point in (edge.start_point, edge.end_point)]
-            lines_from_start.remove(line)
-            lines_from_end.remove(line)
+        tris, false_combinations = self.find_tris()
+        for tri in tris:
+            tri_vertices = self.get_normalized_polygon_vertices(tri)
+            for vertex in tri_vertices:
+                if vertex not in polygon_vertices:
+                    polygon_vertices.append(vertex)
+                polygon_connects.append(polygon_vertices.index(vertex))
 
-            for first_connection in lines_from_start:
-                shared_value = self.check_shared_value(line.start_point, first_connection)
-                if shared_value == "start":
-                    second_connections = [edge for edge in lines_from_end if first_connection.end_point in (edge.start_point, edge.end_point)]
-                    lines_from_start.remove(first_connection)
-                    second_connections += [edge for edge in lines_from_start if first_connection.end_point in (edge.start_point, edge.end_point)]
-                    lines_from_start.append(first_connection)
-                    if second_connections:
-                        print(len(second_connections), second_connections[0])
-                    first_point = first_connection.end_point
-
-                elif shared_value == "end":
-                    second_connections = [edge for edge in lines_from_end if first_connection.start_point in (edge.start_point, edge.end_point)]
-                    lines_from_start.remove(first_connection)
-                    second_connections += [edge for edge in lines_from_start if first_connection.start_point in (edge.start_point, edge.end_point)]
-                    lines_from_start.append(first_connection)
-                    if second_connections:
-                        print(len(second_connections), second_connections[0])
-                    first_point = first_connection.start_point
-
-                if second_connections:
-                    for second_connection in second_connections:
-                        polygon = sorted([line, first_connection, second_connection])
-                        poly = Polygon(polygon[0], polygon[1], polygon[2])
-                        if poly not in self.polygons:
-                            
-                            self.polygons.add(poly)
-                            vertices = [(line.start_point[0], line.start_point[1]),
-                                        (first_point[0], first_point[1]),
-                                        (line.end_point[0], line.end_point[1])
-                                        ]
-                            print(vertices)
-                            for vertex in vertices:
-                                if vertex in polygon_vertices:
-                                    #print("Found at ", polygon_vertices.index(vertex))
-                                    polygon_connects.append(polygon_vertices.index(vertex))
-                                else:
-                                    polygon_vertices.append(vertex)
-                                    polygon_connects.append(polygon_vertices.index(vertex))
-            
-            for first_connection in lines_from_end:
-                shared_value = self.check_shared_value(line.end_point, first_connection)
-                if shared_value == "start":
-                    second_connections = [edge for edge in lines_from_start if first_connection.end_point in (edge.start_point, edge.end_point)]
-                    lines_from_end.remove(first_connection)
-                    second_connections += [edge for edge in lines_from_end if first_connection.end_point in (edge.start_point, edge.end_point)]
-                    lines_from_end.append(first_connection)
-                    if second_connections:
-                        print(len(second_connections), second_connections[0])
-                    first_point = first_connection.end_point
-
-                elif shared_value == "end":
-                    second_connections = [edge for edge in lines_from_start if first_connection.start_point in (edge.start_point, edge.end_point)]
-                    lines_from_end.remove(first_connection)
-                    second_connections += [edge for edge in lines_from_end if first_connection.start_point in (edge.start_point, edge.end_point)]
-                    lines_from_end.append(first_connection)
-                    if second_connections:
-                        print(len(second_connections), second_connections[0])
-                    first_point = first_connection.start_point
-
-                if second_connections:
-                    for second_connection in second_connections:
-                        polygon = sorted([line, first_connection, second_connection])
-                        poly = Polygon(polygon[0], polygon[1], polygon[2])
-                        if poly not in self.polygons:
-                            
-                            self.polygons.add(poly)
-                            vertices = [(line.end_point[0], line.end_point[1]),
-                                        (first_point[0], first_point[1]),
-                                        (line.start_point[0], line.start_point[1])
-                                        ]
-                            print(vertices)
-                            for vertex in vertices:
-                                if vertex in polygon_vertices:
-                                    #print("Found at ", polygon_vertices.index(vertex))
-                                    polygon_connects.append(polygon_vertices.index(vertex))
-                                else:
-                                    polygon_vertices.append(vertex)
-                                    polygon_connects.append(polygon_vertices.index(vertex))
-
-        polygon_count = [3 for polygon in self.polygons]
+            polygon_count.append(3)
+        
         polygon_points = []
         for vertex in polygon_vertices:
             point = om.MPoint(vertex)
             polygon_points.append(point)
 
         origami_paper.create(polygon_points, polygon_count, polygon_connects)
+
+            # other_lines = [shapely.LineString(shapely.get_coordinates(line.line.get("line")).tolist()) for line in self.lines]
+
+            # for other_line in other_lines:
+            #     intersections.append(self.check_line_intersection(first_line, other_line))
+            
+            # if True not in intersections:
+            #     polygon_edges.add(false_line)
 
         return origami_paper
 
@@ -320,32 +322,68 @@ class CreasePattern(QtWidgets.QOpenGLWidget):
     def paintGL(self):
         gl.glLineWidth(3)
         gl.glBegin(gl.GL_LINES) # Begins draw
-        self.draw_pattern()
+        self.draw_pattern() 
+        gl.glEnd()# Ends draw
+        gl.glPointSize(4)
+        gl.glBegin(gl.GL_POINTS) # Begins draw
+        self.draw_points()
         gl.glEnd() # Ends draw
     
     def get_line_data(self):
+        
         line_objects = []
         for idx, line in enumerate(self.crease_pattern):
             line_object = Line(idx=idx, line=line, points_x=self.points_x, points_y=self.points_y)
             if line_object.is_margin:
                 self.pattern_margin_lines.append(line_object)
             line_objects.append(line_object)
+
         return line_objects
 
     def get_all_vertices(self):
         points_x = []
         points_y = []
+        points = set()
         for line in self.crease_pattern:
             shapely_line = line.get("line")
-            points = shapely.get_coordinates(shapely_line).tolist()
-            print(points)
-            points_x.extend((points[0][0], points[1][0]))
-            points_y.extend((points[0][1], points[1][1]))
-        return points_x, points_y
+            point = shapely.get_coordinates(shapely_line).tolist()
+            points_x.extend((point[0][0], point[1][0]))
+            points_y.extend((point[0][1], point[1][1]))
+            for vtx in point:
+                points.add((vtx[0], vtx[1]))
+
+        return points, points_x, points_y
 
     def draw_pattern(self):
         for line in self.lines:
             gl.glColor3f(line.color[0], line.color[1], line.color[2])
+            gl.glVertex2f(line.start_point[0], line.start_point[1])
+            gl.glVertex2f(line.end_point[0], line.end_point[1])
+
+        tris, false_combinations = self.find_tris()
+        for tri in tris:
+            gl.glColor3f(1.0, 0.0, 1.0)
+            ##first line
+
+            gl.glVertex2f(tri[0].start_point[0], tri[0].start_point[1])
+            gl.glVertex2f(tri[0].end_point[0], tri[0].end_point[1])
+            ##second line
+            gl.glVertex2f(tri[1].start_point[0], tri[1].start_point[1])
+            gl.glVertex2f(tri[1].end_point[0], tri[1].end_point[1])
+            # ##third line
+            gl.glVertex2f(tri[2].start_point[0], tri[2].start_point[1])
+            gl.glVertex2f(tri[2].end_point[0], tri[2].end_point[1])
+        
+        for line in false_combinations:
+            new_line = {"line":shapely.geometry.LineString([line[0], line[1]]),"stroke":"black"}
+            new_line = Line(idx=0, line=new_line, points_x=self.points_x, points_y=self.points_y)
+            gl.glColor3f(0.4, 0.0, 1.0)
+            gl.glVertex2f(new_line.start_point[0], new_line.start_point[1])
+            gl.glVertex2f(new_line.end_point[0], new_line.end_point[1])
+    
+    def draw_points(self):
+        for line in self.lines:
+            gl.glColor3f(0.2, 1.0, 0.2)
             gl.glVertex2f(line.start_point[0], line.start_point[1])
             gl.glVertex2f(line.end_point[0], line.end_point[1])
 
